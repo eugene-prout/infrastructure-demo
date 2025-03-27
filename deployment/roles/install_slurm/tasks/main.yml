@@ -1,0 +1,87 @@
+- name: Print out operating system details
+  debug:
+    msg: >-
+      os_family:
+      {{ ansible_os_family }},
+      distro:
+      {{ ansible_distribution }}
+      {{ ansible_distribution_version }}
+
+- name: Install and configure Docker
+  ansible.builtin.include_role:
+    name: install_docker
+  vars:
+    registry_url: "{{ lookup('ansible.builtin.env', 'ANSIBLE_REGISTRY_URL') }}"
+    username: "{{ lookup('ansible.builtin.env', 'ANSIBLE_REGISTRY_USERNAME') }}"
+    password: "{{ lookup('ansible.builtin.env', 'ANSIBLE_REGISTRY_PASSWORD') }}"
+
+- name: Ensure group "prod" exists
+  ansible.builtin.group:
+    name: prod
+    state: present
+
+- name: Create user to run production deployments
+  ansible.builtin.user:
+    name: prod
+    comment: Production user
+    group: prod
+
+- name: Create slurm folder structure
+  ansible.builtin.file:
+    path: /etc/production/applications/slurm
+    state: directory
+
+- name: Copy slurm application files
+  ansible.builtin.copy:
+    src: "slurm-compose.yml"
+    dest: "/etc/production/applications/slurm/docker-compose.yml"
+    owner: prod
+    group: prod
+    mode: '0555'
+
+- name: Get running containers
+  docker_host_info:
+    containers: yes
+  register: docker_info
+
+- name: Stop running containers
+  docker_container:
+    name: "{{ item }}"
+    state: stopped
+  loop: "{{ docker_info.containers | map(attribute='Id') | list }}"
+
+- name: Tear down existing services
+  community.docker.docker_compose:
+    project_src: "/etc/production/applications/slurm/"
+    state: absent
+
+- name: Create and start services
+  community.docker.docker_compose:
+    project_src: /etc/production/applications/slurm/
+    
+- name: Sleep for 1 minute and continue with play
+  ansible.builtin.wait_for:
+    timeout: 60
+  become: false
+  delegate_to: localhost
+
+- name: Get running containers
+  docker_host_info:
+    containers: yes
+  register: docker_info
+
+- debug: msg="{{ docker_info.containers }}"
+
+- name: Register cluster
+  community.docker.docker_container_exec:
+    container: slurmctld
+    command: /bin/bash -c "/usr/bin/sacctmgr --immediate add cluster name=linux"
+
+- name: Restart database and control node to register new cluster
+  community.docker.docker_container:
+    name: "{{ item }}"
+    state: started
+    restart: true
+  loop:
+    - slurmdbd
+    - slurmctld

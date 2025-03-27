@@ -1,0 +1,33 @@
+- name: Add Docker GPG apt Key
+  ansible.builtin.apt_key:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    state: present
+
+- name: Add Docker Repository
+  ansible.builtin.apt_repository:
+    repo: deb https://download.docker.com/linux/ubuntu focal stable
+    state: present
+
+- name: Update apt and install docker-ce
+  ansible.builtin.apt:
+    name: docker-ce
+    state: latest
+    update_cache: true
+
+- name: Login docker registry
+  community.docker.docker_login:
+    registry_url: "{{ registry_url }}"
+    username: "{{ username }}"
+    password: "{{ password }}"
+
+- name: Install Python
+  ansible.builtin.apt:
+    pkg: 
+      - python3
+      - python3-pip
+
+- name: Install docker + compose python package
+  ansible.builtin.pip:
+    name:
+      - docker
+      - docker-compose

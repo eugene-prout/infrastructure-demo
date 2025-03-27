@@ -1,0 +1,20 @@
+services:
+  caddy:
+    image: caddy:2.6
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - .:/etc/caddy/
+      - caddy_data:/data
+    networks:
+      - proxynet
+
+networks:
+  proxynet:
+    name: custom_network
+
+volumes:
+  caddy_data:

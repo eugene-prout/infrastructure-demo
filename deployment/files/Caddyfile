@@ -1,0 +1,12 @@
+alert.prout.tech {
+	reverse_proxy alert-web:8000
+}
+
+caddyfmt.prout.tech {
+	handle /api/* {
+		reverse_proxy caddyfmt-backend:10000
+	}
+	handle {
+		reverse_proxy caddyfmt-frontend:3000
+	}
+}

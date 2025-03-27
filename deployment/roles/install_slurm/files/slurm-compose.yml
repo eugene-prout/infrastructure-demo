@@ -1,0 +1,68 @@
+x-compute: &default-compute
+  image: "XXX/slurm/compute-node:latest"
+  volumes:
+    - etc_munge:/etc/munge
+    - etc_slurm:/etc/slurm
+    - slurm_jobdir:/data
+    - var_log_slurm:/var/log/slurm
+  expose:
+    - "6818"
+  depends_on:
+    - "slurmctld"
+
+services:
+  mysql:
+    image: mariadb:10.10
+    hostname: mysql
+    container_name: slurmdb
+    environment:
+      MYSQL_RANDOM_ROOT_PASSWORD: "yes"
+      MYSQL_DATABASE: slurm_acct_db
+      MYSQL_USER: slurm
+      MYSQL_PASSWORD: password
+    volumes:
+      - var_lib_mysql:/var/lib/mysql
+
+  slurmdbd:
+    image: "XXX/slurm/database-node:latest"
+    container_name: slurmdbd
+    hostname: slurmdbd
+    volumes:
+      - etc_munge:/etc/munge
+      - etc_slurm:/etc/slurm
+      - var_log_slurm:/var/log/slurm
+    expose:
+      - "6819"
+    depends_on:
+      - mysql
+
+  slurmctld:
+    image: "XXX/slurm/control-node:latest"
+    container_name: slurmctld
+    hostname: slurmctld
+    volumes:
+      - etc_munge:/etc/munge
+      - etc_slurm:/etc/slurm
+      - slurm_jobdir:/data
+      - var_log_slurm:/var/log/slurm
+    expose:
+      - "6817"
+    depends_on:
+      - "slurmdbd"
+
+  c1:
+    <<: *default-compute
+    hostname: c1
+    container_name: c1
+    
+  c2:
+    <<: *default-compute
+    hostname: c2
+    container_name: c2
+  
+volumes:
+  etc_munge:
+  etc_slurm:
+  slurm_jobdir:
+  var_lib_mysql:
+  var_log_slurm:

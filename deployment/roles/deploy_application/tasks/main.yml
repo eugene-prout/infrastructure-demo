@@ -1,0 +1,27 @@
+- ansible.builtin.debug:
+    msg: "Deploying {{ application.compose_src }} to {{ application.folder_on_host }}"
+
+- name: Set up folder structure
+  ansible.builtin.file:
+    path: "{{ application.folder_on_host }}"
+    state: directory
+
+- name: Copy Docker Compose file
+  ansible.builtin.copy:
+    src: "{{ application.compose_src }}"
+    dest: "{{ application.folder_on_host }}/docker-compose.yml"
+    owner: prod
+    group: prod
+    mode: '0555'
+
+- name: Create data folder
+  ansible.builtin.file:
+    path: "{{ application.folder_on_host }}/{{ application.data_folder.name }}"
+    state: directory
+    owner: "{{ application.data_folder.owner }}"
+  when: application.data_folder is defined
+
+- name: Create and start service
+  community.docker.docker_compose:
+    project_src: "{{ application.folder_on_host }}"
+    state: present

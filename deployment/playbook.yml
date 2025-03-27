@@ -1,0 +1,81 @@
+- name: Play to start production services
+  hosts: XXX
+  gather_facts: true
+  become: true
+  tasks:
+    - name: Print out operating system details
+      debug:
+        msg: >-
+          os_family:
+          {{ ansible_os_family }},
+          distro:
+          {{ ansible_distribution }}
+          {{ ansible_distribution_version }}
+
+    - name: Install and configure Docker
+      ansible.builtin.include_role:
+        name: install_docker
+      vars:
+        registry_url: "{{ lookup('ansible.builtin.env', 'ANSIBLE_REGISTRY_URL') }}"
+        username: "{{ lookup('ansible.builtin.env', 'ANSIBLE_REGISTRY_USERNAME') }}"
+        password: "{{ lookup('ansible.builtin.env', 'ANSIBLE_REGISTRY_PASSWORD') }}"
+
+    - name: Ensure group "prod" exists
+      ansible.builtin.group:
+        name: prod
+        state: present
+
+    - name: Create user to run production deployments
+      ansible.builtin.user:
+        name: prod
+        comment: Production user
+        group: prod
+
+    - name: Deploy applications
+      ansible.builtin.include_role:
+        name: deploy_application
+      vars:
+        application: "{{ item }}"
+      loop:
+        - { folder_on_host: "/etc/production/applications/alert", compose_src: "files/alert-compose.yml" }
+        - { folder_on_host: "/etc/production/applications/caddyfmt", compose_src: "files/caddyfmt-compose.yml" }
+
+    - name: Set up Caddy folder
+      ansible.builtin.file:
+        path: "/etc/production/caddy"
+        state: directory
+      
+    - name: Copy Caddy Docker Compose files
+      ansible.builtin.copy:
+        src: "files/caddy-compose.yml"
+        dest: "/etc/production/caddy/docker-compose.yml"
+        owner: prod
+        group: prod
+        mode: '0555'
+
+    - name: Copy Caddyfile
+      ansible.builtin.copy:
+        src: "files/Caddyfile"
+        dest: "/etc/production/caddy/"
+        owner: prod
+        group: prod
+        mode: '0555'
+
+    - name: Start Caddy
+      community.docker.docker_compose:
+        project_src: "/etc/production/caddy/"
+        state: present
+    
+    - name: Get Caddy container
+      docker_host_info:
+        containers: yes
+        containers_filters:
+          name: "caddy_caddy"
+      register: caddy_container_info
+      failed_when: "caddy_container_info.containers | list | length > 1"
+
+    - name: Execute Caddy reload command inside Caddy container
+      community.docker.docker_container_exec:
+        container: "{{ ((caddy_container_info.containers | first)['Names'] | first)[1:] }}"
+        chdir: /etc/caddy 
+        command: caddy reload
